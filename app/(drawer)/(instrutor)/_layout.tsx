@@ -3,7 +3,7 @@ import { TabBarIcon } from '@/components/TabBarIcon';
 import { useThemeStore } from '@/store/store';
 import { brandTypography, getBrandColors } from '@/theme/tokens';
 
-export default function TabLayout() {
+export default function InstrutorTabLayout() {
   const mode = useThemeStore((state) => state.mode);
   const brandColors = getBrandColors(mode);
 
@@ -26,15 +26,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Tab One',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+          title: 'Início',
+          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
         }}
       />
       <Tabs.Screen
         name="two"
         options={{
-          title: 'Tab Two',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+          title: 'Agenda',
+          tabBarIcon: ({ color }) => <TabBarIcon name="calendar" color={color} />,
         }}
       />
     </Tabs>

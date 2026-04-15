@@ -1,4 +1,4 @@
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Link } from 'expo-router';
 import { Drawer } from 'expo-router/drawer';
 import { Text, View, Switch } from 'react-native';
@@ -64,29 +64,29 @@ const DrawerLayout = () => {
           fontFamily: brandTypography.title,
         },
         headerShadowVisible: false,
+        headerRight: () => (
+          <Link href="/modal" asChild>
+            <HeaderButton />
+          </Link>
+        ),
       }}>
       <Drawer.Screen
-        name="index"
+        name="(instrutor)"
         options={{
-          headerTitle: 'Home',
-          drawerLabel: 'Home',
+          headerTitle: 'Instrutor',
+          drawerLabel: 'Instrutor',
           drawerIcon: ({ size, color }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+            <FontAwesome name="briefcase" size={size} color={color} />
           ),
         }}
       />
       <Drawer.Screen
-        name="(tabs)"
+        name="(aluno)"
         options={{
-          headerTitle: 'Tabs',
-          drawerLabel: 'Tabs',
+          headerTitle: 'Aluno',
+          drawerLabel: 'Aluno',
           drawerIcon: ({ size, color }) => (
-            <MaterialIcons name="border-bottom" size={size} color={color} />
-          ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <HeaderButton />
-            </Link>
+            <FontAwesome name="user" size={size} color={color} />
           ),
         }}
       />
