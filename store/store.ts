@@ -13,3 +13,17 @@ export const useStore = create<BearState>((set) => ({
   removeAllBears: () => set({ bears: 0 }),
   updateBears: (newBears) => set({ bears: newBears }),
 }));
+
+export type ThemeMode = 'light' | 'dark';
+
+interface ThemeState {
+  mode: ThemeMode;
+  toggleTheme: () => void;
+  setTheme: (mode: ThemeMode) => void;
+}
+
+export const useThemeStore = create<ThemeState>((set) => ({
+  mode: 'light',
+  toggleTheme: () => set((state) => ({ mode: state.mode === 'light' ? 'dark' : 'light' })),
+  setTheme: (mode) => set({ mode }),
+}));

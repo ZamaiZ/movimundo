@@ -1,16 +1,21 @@
 import { forwardRef } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Pressable, StyleSheet } from 'react-native';
+import { useThemeStore } from '@/store/store';
+import { getBrandColors } from '@/theme/tokens';
 
 export const HeaderButton = forwardRef<typeof Pressable, { onPress?: () => void }>(
   ({ onPress }, ref) => {
+    const mode = useThemeStore((state) => state.mode);
+    const brandColors = getBrandColors(mode);
+
     return (
       <Pressable onPress={onPress}>
         {({ pressed }) => (
           <FontAwesome
             name="info-circle"
             size={25}
-            color="gray"
+            color={brandColors.secondary}
             style={[
               styles.headerRight,
               {
