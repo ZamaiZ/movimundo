@@ -2,7 +2,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Text, View } from 'react-native';
 
 import { useThemeStore } from '@/store/store';
-import { brandTypography, getBrandColors } from '@/theme/tokens';
+import { brandTypography, getBrandColors, getShadow, layout } from '@/theme/tokens';
 
 interface UpcomingClassItemProps {
   time: string;
@@ -19,51 +19,56 @@ export function UpcomingClassItem({ time, title, location, status }: UpcomingCla
     status === 'Confirmada' ? colors.success : status === 'Quase lotada' ? colors.warning : colors.secondary;
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <View style={styles.row}>
-        <Text style={[styles.time, { color: colors.primary, fontFamily: brandTypography.title }]}>{time}</Text>
-        <Text style={[styles.status, { color: statusColor, fontFamily: brandTypography.title }]}>{status}</Text>
+    <View
+      style={[
+        {
+          borderWidth: 1,
+          borderColor: colors.borderSubtle,
+          borderRadius: layout.radius.lg,
+          borderLeftWidth: 4,
+          borderLeftColor: statusColor,
+          backgroundColor: colors.surface,
+          padding: layout.space.md,
+          gap: 10,
+        },
+        getShadow(mode, 'card'),
+      ]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View
+            style={{
+              backgroundColor: colors.accentSoft,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: layout.radius.sm,
+            }}>
+            <Text style={{ color: colors.primary, fontFamily: brandTypography.label, fontSize: 13 }}>
+              {time}
+            </Text>
+          </View>
+          <Text
+            style={{
+              color: statusColor,
+              fontFamily: brandTypography.label,
+              fontSize: 11,
+              textTransform: 'uppercase' as const,
+              letterSpacing: 0.5,
+            }}>
+            {status}
+          </Text>
+        </View>
       </View>
 
-      <Text style={[styles.title, { color: colors.text, fontFamily: brandTypography.title }]}>{title}</Text>
+      <Text style={{ color: colors.text, fontFamily: brandTypography.displaySemibold, fontSize: 17, lineHeight: 22 }}>
+        {title}
+      </Text>
 
-      <View style={styles.locationRow}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <FontAwesome name="map-marker" size={14} color={colors.textMuted} />
-        <Text style={[styles.location, { color: colors.textMuted, fontFamily: brandTypography.body }]}>
+        <Text style={{ color: colors.textMuted, fontFamily: brandTypography.body, fontSize: 13, flex: 1 }}>
           {location}
         </Text>
       </View>
     </View>
   );
 }
-
-const styles = {
-  card: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 14,
-    gap: 8,
-  },
-  row: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-  },
-  time: {
-    fontSize: 14,
-  },
-  status: {
-    fontSize: 12,
-  },
-  title: {
-    fontSize: 16,
-  },
-  locationRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 6,
-  },
-  location: {
-    fontSize: 13,
-  },
-};

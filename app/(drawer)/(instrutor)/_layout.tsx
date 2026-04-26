@@ -1,40 +1,32 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { TabBarIcon } from '@/components/TabBarIcon';
-import { useThemeStore } from '@/store/store';
-import { brandTypography, getBrandColors } from '@/theme/tokens';
+
+import { getSharedTabScreenOptions } from '@/theme/tabBar';
 
 export default function InstrutorTabLayout() {
-  const mode = useThemeStore((state) => state.mode);
-  const brandColors = getBrandColors(mode);
-
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        sceneStyle: { backgroundColor: brandColors.background },
-        tabBarActiveTintColor: brandColors.primary,
-        tabBarInactiveTintColor: brandColors.textMuted,
-        tabBarStyle: {
-          backgroundColor: brandColors.surface,
-          borderTopColor: brandColors.border,
-        },
-        tabBarLabelStyle: {
-          fontFamily: brandTypography.body,
-          fontSize: 12,
-        },
-      }}>
+      screenOptions={getSharedTabScreenOptions()}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Início',
-          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="two"
         options={{
           title: 'Agenda',
-          tabBarIcon: ({ color }) => <TabBarIcon name="calendar" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'calendar' : 'calendar-outline'}
+              size={24}
+              color={color}
+            />
+          ),
         }}
       />
     </Tabs>

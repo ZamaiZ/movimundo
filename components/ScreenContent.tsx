@@ -19,10 +19,10 @@ export const ScreenContent: React.FC<ScreenContentProps> = ({ title, path, child
     <View className={styles.container} style={{ backgroundColor: colors.background }}>
       <Text
         className={styles.title}
-        style={{ color: colors.text, fontFamily: brandTypography.title }}>
+        style={{ color: colors.text, fontFamily: brandTypography.displaySemibold }}>
         {title}
       </Text>
-      <View className={styles.separator} style={{ backgroundColor: colors.border }} />
+      <View className={styles.separator} style={{ backgroundColor: colors.borderSubtle }} />
       <EditScreenInfo path={path} />
       {children}
     </View>

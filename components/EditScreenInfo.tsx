@@ -6,39 +6,30 @@ interface EditScreenInfoProps {
   path: string;
 }
 
+/** Bloco opcional para desenvolvimento — não usado nas rotas de apresentação principais. */
 export const EditScreenInfo: React.FC<EditScreenInfoProps> = ({ path }) => {
   const mode = useThemeStore((state) => state.mode);
   const colors = getBrandColors(mode);
-  const title = 'Open up the code for this screen:';
-  const description =
-    'Change any of the text, save the file, and your app will automatically update.';
 
   return (
     <View>
-      <View className={styles.getStartedContainer}>
+      <View className="items-center mx-12">
         <Text
-          className={styles.getStartedText}
+          className="text-lg leading-6 text-center"
           style={{ color: colors.text, fontFamily: brandTypography.body }}>
-          {title}
+          Arquivo desta tela:
         </Text>
         <View
-          className={`${styles.codeHighlightContainer} ${styles.homeScreenFilename}`}
-          style={{ backgroundColor: colors.surface }}>
-          <Text style={{ color: colors.primary, fontFamily: brandTypography.body }}>{path}</Text>
+          className="rounded-md px-1 my-2"
+          style={{ backgroundColor: colors.surfaceHighlight, paddingVertical: 6, paddingHorizontal: 10 }}>
+          <Text style={{ color: colors.primary, fontFamily: brandTypography.mono, fontSize: 13 }}>{path}</Text>
         </View>
         <Text
-          className={styles.getStartedText}
+          className="text-lg leading-6 text-center"
           style={{ color: colors.textMuted, fontFamily: brandTypography.body }}>
-          {description}
+          Salve o arquivo para atualizar o app em tempo real.
         </Text>
       </View>
     </View>
   );
-};
-
-const styles = {
-  codeHighlightContainer: `rounded-md px-1`,
-  getStartedContainer: `items-center mx-12`,
-  getStartedText: `text-lg leading-6 text-center`,
-  homeScreenFilename: `my-2`,
 };

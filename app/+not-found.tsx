@@ -1,10 +1,11 @@
 import { Link, Stack } from 'expo-router';
+import { Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
-import { Text } from 'react-native';
-
+import { Button } from '@/components/Button';
 import { Container } from '@/components/Container';
 import { useThemeStore } from '@/store/store';
-import { brandTypography, getBrandColors } from '@/theme/tokens';
+import { brandTypography, getBrandColors, layout } from '@/theme/tokens';
 
 export default function NotFoundScreen() {
   const mode = useThemeStore((state) => state.mode);
@@ -12,27 +13,52 @@ export default function NotFoundScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Oops!' }} />
+      <Stack.Screen options={{ title: 'Página não encontrada' }} />
       <Container>
-        <Text
-          className={styles.title}
-          style={{ color: colors.text, fontFamily: brandTypography.title }}>
-          {"This screen doesn't exist."}
-        </Text>
-        <Link href="/" className={styles.link}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: layout.space.page,
+            gap: 20,
+          }}>
+          <View
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 36,
+              backgroundColor: colors.accentSoft,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+            <Ionicons name="compass-outline" size={36} color={colors.primary} />
+          </View>
           <Text
-            className={styles.linkText}
-            style={{ color: colors.primary, fontFamily: brandTypography.body }}>
-            Go to home screen!
+            style={{
+              textAlign: 'center',
+              color: colors.text,
+              fontFamily: brandTypography.display,
+              fontSize: 22,
+              lineHeight: 28,
+            }}>
+            Esta tela não existe
           </Text>
-        </Link>
+          <Text
+            style={{
+              textAlign: 'center',
+              color: colors.textMuted,
+              fontFamily: brandTypography.body,
+              fontSize: 15,
+              lineHeight: 22,
+            }}>
+            Verifique o endereço ou volte para a área principal do app.
+          </Text>
+          <Link href="/" asChild>
+            <Button title="Ir para o início" variant="primary" size="lg" />
+          </Link>
+        </View>
       </Container>
     </>
   );
 }
-
-const styles = {
-  title: `text-xl font-bold`,
-  link: `mt-4 pt-4`,
-  linkText: `text-base`,
-};

@@ -2,51 +2,67 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Text, View } from 'react-native';
 
 import { useThemeStore } from '@/store/store';
-import { brandTypography, getBrandColors } from '@/theme/tokens';
+import { brandTypography, getBrandColors, getShadow, layout, type BrandColors } from '@/theme/tokens';
 
 interface MetricCardProps {
   label: string;
   value: string;
   icon: React.ComponentProps<typeof FontAwesome>['name'];
+  accent?: keyof Pick<BrandColors, 'primary' | 'secondary'>;
 }
 
-export function MetricCard({ label, value, icon }: MetricCardProps) {
+export function MetricCard({ label, value, icon, accent = 'primary' }: MetricCardProps) {
   const mode = useThemeStore((state) => state.mode);
   const colors = getBrandColors(mode);
+  const accentColor = colors[accent];
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <View style={[styles.iconWrap, { backgroundColor: colors.surfaceMuted }]}>
-        <FontAwesome name={icon} size={16} color={colors.primary} />
+    <View
+      style={[
+        {
+          flex: 1,
+          backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: colors.borderSubtle,
+          borderRadius: layout.radius.lg,
+          padding: layout.space.md,
+          gap: 10,
+          minHeight: 120,
+        },
+        getShadow(mode, 'card'),
+      ]}>
+      <View
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: layout.radius.sm,
+          backgroundColor: colors.accentSoft,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+        <FontAwesome name={icon} size={17} color={accentColor} />
       </View>
-      <Text style={[styles.value, { color: colors.text, fontFamily: brandTypography.title }]}>{value}</Text>
-      <Text style={[styles.label, { color: colors.textMuted, fontFamily: brandTypography.body }]}>{label}</Text>
+      <Text
+        style={{
+          color: colors.text,
+          fontFamily: brandTypography.display,
+          fontSize: 32,
+          lineHeight: 36,
+          letterSpacing: -0.5,
+        }}>
+        {value}
+      </Text>
+      <Text
+        style={{
+          color: colors.textMuted,
+          fontFamily: brandTypography.label,
+          fontSize: 12,
+          lineHeight: 16,
+          textTransform: 'uppercase' as const,
+          letterSpacing: 0.6,
+        }}>
+        {label}
+      </Text>
     </View>
   );
 }
-
-const styles = {
-  card: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 14,
-    gap: 8,
-    minHeight: 112,
-  },
-  iconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  value: {
-    fontSize: 20,
-    lineHeight: 24,
-  },
-  label: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-};
