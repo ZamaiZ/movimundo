@@ -40,6 +40,7 @@ export default function AlunoAulasScreen() {
                 fontSize: 11,
                 letterSpacing: 0.8,
                 textTransform: 'uppercase',
+                marginTop: 20,
               }}>
               Sua semana
             </Text>

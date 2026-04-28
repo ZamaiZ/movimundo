@@ -1,19 +1,18 @@
 import { Stack } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
+import { HeroSurface } from '@/components/HeroSurface';
 import { MetricCard } from '@/components/instructor/MetricCard';
 import { SectionHeader } from '@/components/instructor/SectionHeader';
 import { UpcomingClassItem } from '@/components/instructor/UpcomingClassItem';
 import { useThemeStore } from '@/store/store';
-import { brandTypography, getBrandColors, getHeroGradient, layout } from '@/theme/tokens';
+import { brandTypography, getBrandColors, getShadow, layout } from '@/theme/tokens';
 
 export default function InstrutorHomeScreen() {
   const mode = useThemeStore((state) => state.mode);
   const colors = getBrandColors(mode);
-  const hero = getHeroGradient(mode);
 
   return (
     <>
@@ -27,17 +26,7 @@ export default function InstrutorHomeScreen() {
           }}
           style={{ backgroundColor: 'transparent' }}
           showsVerticalScrollIndicator={false}>
-          <LinearGradient
-            colors={hero}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{
-              borderRadius: layout.radius.lg,
-              padding: layout.space.lg,
-              borderWidth: 1,
-              borderColor: colors.borderSubtle,
-              overflow: 'hidden' as const,
-            }}>
+          <HeroSurface>
             <View
               style={{
                 position: 'absolute' as const,
@@ -109,11 +98,12 @@ export default function InstrutorHomeScreen() {
                   backgroundColor: colors.primary,
                   alignItems: 'center',
                   justifyContent: 'center',
+                  ...getShadow(mode, 'card'),
                 }}>
                 <FontAwesome name="line-chart" size={22} color={colors.textOnPrimary} />
               </View>
             </View>
-          </LinearGradient>
+          </HeroSurface>
 
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <MetricCard label="Aulas hoje" value="8" icon="clock-o" accent="primary" />

@@ -1,15 +1,46 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Stack } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+  ScrollView as GHScrollView,
+} from 'react-native-gesture-handler';
+import Animated, {
+  Extrapolation,
+  clamp,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppScreen } from '@/components/AppScreen';
+import { HeroSurface } from '@/components/HeroSurface';
 import { AgendaDayChip } from '@/components/instructor/AgendaDayChip';
+import { FormDayMonthDivider } from '@/components/instructor/FormDayMonthDivider';
 import { AgendaFilterChip } from '@/components/instructor/AgendaFilterChip';
 import { AgendaTimelineItem } from '@/components/instructor/AgendaTimelineItem';
 import { useThemeStore } from '@/store/store';
-import { brandTypography, getBrandColors, getHeroGradient, getShadow, layout } from '@/theme/tokens';
+import { brandTypography, getBrandColors, getShadow, layout } from '@/theme/tokens';
 
 type AgendaStatus = 'Confirmada' | 'Aberta' | 'Quase lotada';
 
@@ -102,9 +133,41 @@ function formatMonthRange(weekStart: Date, weekEnd: Date) {
   return `${firstMonth} / ${secondMonth}`;
 }
 
+function startOfDay(date: Date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date: Date, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function toDateKey(date: Date) {
+  const d = startOfDay(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function parseDateKey(key: string) {
+  const [y, mon, day] = key.split('-').map(Number);
+  return startOfDay(new Date(y, mon - 1, day));
+}
+
+const OPEN_SPRING = { damping: 22, stiffness: 210, mass: 0.85 };
+const SNAP_SPRING = { damping: 24, stiffness: 300, mass: 0.72 };
+const CLOSE_SPRING = { damping: 23, stiffness: 280, mass: 0.88 };
+const SNAP_DRAG_RESET = { damping: 28, stiffness: 360, mass: 0.75 };
+
 export default function InstrutorAgendaScreen() {
   const mode = useThemeStore((state) => state.mode);
   const colors = getBrandColors(mode);
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedDayIndex, setSelectedDayIndex] = useState(1);
@@ -112,8 +175,12 @@ export default function InstrutorAgendaScreen() {
   const [events, setEvents] = useState<ClassEvent[]>(WEEK_EVENTS);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [createSheetSnap, setCreateSheetSnap] = useState<'peek' | 'full'>('peek');
+  const [dayStripLoading, setDayStripLoading] = useState(false);
+  const [formDayChunkCount, setFormDayChunkCount] = useState(1);
+  const stripEndLoadLockRef = useRef(false);
   const [form, setForm] = useState({
-    dayOffset: 1,
+    selectedDateKey: '',
     time: '',
     title: '',
     location: '',
@@ -141,6 +208,201 @@ export default function InstrutorAgendaScreen() {
     });
   }, [weekOffset]);
 
+  const formDayStrip = useMemo(() => {
+    const anchor = weekDays[0]?.date;
+    if (!anchor) return [];
+    const start = startOfDay(new Date(anchor));
+    const totalDays = 7 * formDayChunkCount;
+    return Array.from({ length: totalDays }, (_, i) => {
+      const date = addDays(start, i);
+      return {
+        date,
+        dateKey: toDateKey(date),
+        dayLabel: DAY_LABELS[date.getDay()],
+        dateLabel: String(date.getDate()),
+      };
+    });
+  }, [weekDays, formDayChunkCount]);
+
+  const sheetPeekHeight = useMemo(() => Math.round(windowHeight * 0.86), [windowHeight]);
+  const sheetFullHeight = useMemo(() => windowHeight, [windowHeight]);
+  const sheetMidHeight = useMemo(() => sheetPeekHeight + (sheetFullHeight - sheetPeekHeight) / 2, [sheetPeekHeight, sheetFullHeight]);
+
+  const sheetHeightSv = useSharedValue(sheetPeekHeight);
+  const dismissTranslateSv = useSharedValue(0);
+  const backdropOpacitySv = useSharedValue(0);
+  const entryTranslateSv = useSharedValue(0);
+  /** Captured pan start baseline (peek/full drag). */
+  const panStartSheetH = useSharedValue(sheetPeekHeight);
+  const panStartDismiss = useSharedValue(0);
+
+  const snapRef = useRef<'peek' | 'full'>('peek');
+  snapRef.current = createSheetSnap;
+
+  const finalizeClosed = useCallback(() => {
+    setIsCreateOpen(false);
+    setCreateSheetSnap('peek');
+  }, []);
+
+  const requestDismissSheetAnimated = useCallback(() => {
+    backdropOpacitySv.value = withTiming(0, { duration: 260 });
+    dismissTranslateSv.value = withSpring(windowHeight + 40, CLOSE_SPRING, (finished) => {
+      if (finished) runOnJS(finalizeClosed)();
+    });
+  }, [backdropOpacitySv, dismissTranslateSv, finalizeClosed, windowHeight]);
+
+  const togglePeekFullAnimated = useCallback(() => {
+    if (!isCreateOpen || isSaving) return;
+    const next = snapRef.current === 'full' ? 'peek' : 'full';
+    const target = next === 'full' ? sheetFullHeight : sheetPeekHeight;
+    snapRef.current = next;
+    setCreateSheetSnap(next);
+    sheetHeightSv.value = withSpring(target, SNAP_SPRING);
+  }, [isCreateOpen, isSaving, sheetFullHeight, sheetPeekHeight, sheetHeightSv]);
+
+  const gestureAllowed = Boolean(isCreateOpen && !isSaving);
+
+  const panGesture = Gesture.Pan()
+    .enabled(gestureAllowed)
+    .activeOffsetY([-8, 8])
+    .failOffsetX([-26, 26])
+    .onStart(() => {
+      panStartSheetH.value = sheetHeightSv.value;
+      panStartDismiss.value = dismissTranslateSv.value;
+    })
+    .onUpdate((e) => {
+      const dy = e.translationY;
+      const raw = panStartSheetH.value - dy;
+      if (raw < sheetPeekHeight) {
+        sheetHeightSv.value = sheetPeekHeight;
+        dismissTranslateSv.value = panStartDismiss.value + (sheetPeekHeight - raw);
+        return;
+      }
+      if (raw > sheetFullHeight) {
+        sheetHeightSv.value = sheetFullHeight;
+        dismissTranslateSv.value = panStartDismiss.value;
+        return;
+      }
+      sheetHeightSv.value = raw;
+      dismissTranslateSv.value = panStartDismiss.value;
+    })
+    .onEnd((e) => {
+      'worklet';
+      const vy = e.velocityY;
+      const dh = dismissTranslateSv.value;
+      const DISMISS_THRESHOLD = Math.min(windowHeight * 0.09, 100);
+      const HARD_DISMISS_Y = Math.min(windowHeight * 0.04, 40);
+
+      if (dh >= DISMISS_THRESHOLD || (dh > HARD_DISMISS_Y && vy > 760)) {
+        backdropOpacitySv.value = withTiming(0, { duration: 260 });
+        dismissTranslateSv.value = withSpring(windowHeight + 40, CLOSE_SPRING, (finished) => {
+          if (finished) runOnJS(finalizeClosed)();
+        });
+        return;
+      }
+
+      dismissTranslateSv.value = withSpring(0, SNAP_DRAG_RESET);
+
+      const currentH = sheetHeightSv.value;
+      let targetH = currentH >= sheetMidHeight ? sheetFullHeight : sheetPeekHeight;
+      if (vy < -420) targetH = sheetFullHeight;
+      else if (vy > 420) targetH = sheetPeekHeight;
+      sheetHeightSv.value = withSpring(targetH, SNAP_SPRING, (finished) => {
+        if (!finished) return;
+        const label: 'peek' | 'full' = targetH >= sheetMidHeight ? 'full' : 'peek';
+        runOnJS(setCreateSheetSnap)(label);
+      });
+    });
+
+  const toggleTapGesture = Gesture.Tap()
+    .enabled(gestureAllowed)
+    .maxDuration(320)
+    .maxDistance(14)
+    .onEnd(() => {
+      runOnJS(togglePeekFullAnimated)();
+    });
+
+  const grabGestures = Gesture.Exclusive(panGesture, toggleTapGesture);
+
+  const backdropOverlayStyle = useAnimatedStyle(() => {
+    const dim = interpolate(
+      dismissTranslateSv.value,
+      [0, windowHeight * 0.45],
+      [1, 0],
+      Extrapolation.CLAMP,
+    );
+    return {
+      opacity: backdropOpacitySv.value * dim,
+      backgroundColor: colors.overlay as unknown as string,
+    };
+  }, [colors.overlay]);
+
+  const sheetWrapperStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: entryTranslateSv.value + dismissTranslateSv.value }],
+  }));
+
+  const sheetCardStyle = useAnimatedStyle(() => {
+    const h = clamp(sheetHeightSv.value, sheetPeekHeight * 0.96, sheetFullHeight + 2);
+    const padTop = interpolate(
+      h,
+      [sheetPeekHeight, sheetFullHeight],
+      [6, insets.top + 10],
+      Extrapolation.CLAMP,
+    );
+    const padBottom = interpolate(
+      h,
+      [sheetPeekHeight, sheetFullHeight],
+      [22, insets.bottom + 22],
+      Extrapolation.CLAMP,
+    );
+    return {
+      height: h,
+      maxHeight: sheetFullHeight + 6,
+      paddingTop: padTop,
+      paddingBottom: padBottom,
+      overflow: 'hidden' as const,
+    };
+  });
+
+  /** Abre entrada suave sempre que abre modal (FAB). */
+  const runOpenPresentation = useCallback(() => {
+    sheetHeightSv.value = sheetPeekHeight;
+    dismissTranslateSv.value = 0;
+    entryTranslateSv.value = 72;
+    backdropOpacitySv.value = 0;
+    backdropOpacitySv.value = withTiming(1, { duration: 300 });
+    entryTranslateSv.value = withSpring(0, OPEN_SPRING);
+  }, [backdropOpacitySv, dismissTranslateSv, entryTranslateSv, sheetPeekHeight, sheetHeightSv]);
+
+  const handleFormDayStripScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+    const w = layoutMeasurement.width;
+    if (w <= 0) return;
+    const threshold = 72;
+    if (contentOffset.x + w < contentSize.width - threshold) {
+      stripEndLoadLockRef.current = false;
+      return;
+    }
+    if (stripEndLoadLockRef.current) return;
+    stripEndLoadLockRef.current = true;
+    setDayStripLoading(true);
+    setFormDayChunkCount((c) => c + 1);
+    setTimeout(() => {
+      stripEndLoadLockRef.current = false;
+    }, 450);
+  }, []);
+
+  useEffect(() => {
+    if (!dayStripLoading) return;
+    const t = setTimeout(() => setDayStripLoading(false), 400);
+    return () => clearTimeout(t);
+  }, [formDayChunkCount, dayStripLoading]);
+
+  const closeCreateModal = useCallback(() => {
+    if (isSaving) return;
+    requestDismissSheetAnimated();
+  }, [isSaving, requestDismissSheetAnimated]);
+
   const selectedDay = weekDays[selectedDayIndex];
   const weekStart = weekDays[0]?.date ?? new Date();
   const weekEnd = weekDays[6]?.date ?? new Date();
@@ -153,6 +415,7 @@ export default function InstrutorAgendaScreen() {
   }, [events, selectedDayIndex, filter]);
 
   const canSubmit =
+    Boolean(form.selectedDateKey) &&
     form.time.trim() &&
     form.title.trim() &&
     form.location.trim() &&
@@ -161,8 +424,9 @@ export default function InstrutorAgendaScreen() {
     form.maxStudents.trim();
 
   const resetForm = () => {
+    const d = weekDays[selectedDayIndex]?.date;
     setForm({
-      dayOffset: selectedDayIndex,
+      selectedDateKey: d ? toDateKey(d) : '',
       time: '',
       title: '',
       location: '',
@@ -175,8 +439,14 @@ export default function InstrutorAgendaScreen() {
   };
 
   const handleOpenCreate = () => {
+    snapRef.current = 'peek';
+    setCreateSheetSnap('peek');
+    setDayStripLoading(false);
+    setFormDayChunkCount(1);
+    stripEndLoadLockRef.current = false;
     resetForm();
     setIsCreateOpen(true);
+    runOpenPresentation();
   };
 
   const handleSaveClass = async () => {
@@ -184,9 +454,17 @@ export default function InstrutorAgendaScreen() {
     setIsSaving(true);
     await new Promise((resolve) => setTimeout(resolve, 1200));
 
+    const picked = parseDateKey(form.selectedDateKey);
+    const visibleWeekStart = getStartOfWeek(new Date(weekDays[0].date));
+    const pickedWeekStart = getStartOfWeek(picked);
+    const deltaDays = (pickedWeekStart.getTime() - visibleWeekStart.getTime()) / 86400000;
+    const deltaWeeks = Math.round(deltaDays / 7);
+
+    const dayOffset = picked.getDay();
+
     const event: ClassEvent = {
       id: `${Date.now()}`,
-      dayOffset: form.dayOffset,
+      dayOffset,
       time: form.time.trim(),
       title: form.title.trim(),
       location: form.location.trim(),
@@ -197,13 +475,14 @@ export default function InstrutorAgendaScreen() {
       notes: form.notes.trim() || undefined,
     };
 
+    setWeekOffset((w) => w + deltaWeeks);
     setEvents((current) =>
       [...current, event].sort((a, b) => a.dayOffset - b.dayOffset || a.time.localeCompare(b.time))
     );
-    setSelectedDayIndex(form.dayOffset);
+    setSelectedDayIndex(dayOffset);
     setFilter('Todas');
     setIsSaving(false);
-    setIsCreateOpen(false);
+    requestDismissSheetAnimated();
   };
 
   return (
@@ -215,57 +494,70 @@ export default function InstrutorAgendaScreen() {
           contentContainerStyle={styles.content}
           stickyHeaderIndices={[1]}
           showsVerticalScrollIndicator={false}>
-          <LinearGradient
-            colors={getHeroGradient(mode)}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[
-              styles.headerCard,
-              { borderColor: colors.borderSubtle, borderWidth: 1 },
-            ]}>
-            <View style={styles.headerTopRow}>
-              <View>
+          <HeroSurface padding={layout.space.md}>
+            <View style={styles.weekSelectorStack}>
+              <View style={styles.headerTopRow}>
+                <View>
+                  <Text
+                    style={[
+                      styles.headerTitle,
+                      { color: colors.text, fontFamily: brandTypography.display },
+                    ]}>
+                    Agenda
+                  </Text>
+                  <Text
+                    style={[styles.headerSubtitle, { color: colors.textMuted, fontFamily: brandTypography.body }]}>
+                    Semana de {weekTitle}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.headerIconWrap,
+                    { backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.borderSubtle },
+                  ]}>
+                  <FontAwesome name="calendar" size={16} color={colors.primary} />
+                </View>
+              </View>
+
+              <View style={styles.weekNavRow}>
+                <Pressable
+                  style={[
+                    styles.weekNavButton,
+                    mode === 'light'
+                      ? {
+                          backgroundColor: colors.surface,
+                          borderWidth: 1,
+                          borderColor: colors.borderSubtle,
+                        }
+                      : { backgroundColor: colors.surfaceMuted },
+                  ]}
+                  onPress={() => setWeekOffset((current) => current - 1)}>
+                  <FontAwesome name="chevron-left" size={12} color={colors.text} />
+                </Pressable>
                 <Text
                   style={[
-                    styles.headerTitle,
-                    { color: colors.text, fontFamily: brandTypography.display },
+                    styles.weekRangeText,
+                    { color: colors.text, fontFamily: brandTypography.displaySemibold },
                   ]}>
-                  Agenda
+                  {weekDays[0]?.dateLabel} — {weekDays[6]?.dateLabel}
                 </Text>
-                <Text
-                  style={[styles.headerSubtitle, { color: colors.textMuted, fontFamily: brandTypography.body }]}>
-                  Semana de {weekTitle}
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.headerIconWrap,
-                  { backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.borderSubtle },
-                ]}>
-                <FontAwesome name="calendar" size={16} color={colors.primary} />
+                <Pressable
+                  style={[
+                    styles.weekNavButton,
+                    mode === 'light'
+                      ? {
+                          backgroundColor: colors.surface,
+                          borderWidth: 1,
+                          borderColor: colors.borderSubtle,
+                        }
+                      : { backgroundColor: colors.surfaceMuted },
+                  ]}
+                  onPress={() => setWeekOffset((current) => current + 1)}>
+                  <FontAwesome name="chevron-right" size={12} color={colors.text} />
+                </Pressable>
               </View>
             </View>
-
-            <View style={styles.weekNavRow}>
-              <Pressable
-                style={[styles.weekNavButton, { backgroundColor: colors.surfaceMuted }]}
-                onPress={() => setWeekOffset((current) => current - 1)}>
-                <FontAwesome name="chevron-left" size={12} color={colors.text} />
-              </Pressable>
-              <Text
-                style={[
-                  styles.weekRangeText,
-                  { color: colors.text, fontFamily: brandTypography.displaySemibold },
-                ]}>
-                {weekDays[0]?.dateLabel} — {weekDays[6]?.dateLabel}
-              </Text>
-              <Pressable
-                style={[styles.weekNavButton, { backgroundColor: colors.surfaceMuted }]}
-                onPress={() => setWeekOffset((current) => current + 1)}>
-                <FontAwesome name="chevron-right" size={12} color={colors.text} />
-              </Pressable>
-            </View>
-          </LinearGradient>
+          </HeroSurface>
 
           <View
             style={[
@@ -388,17 +680,47 @@ export default function InstrutorAgendaScreen() {
           </Pressable>
         </View>
 
-        <Modal visible={isCreateOpen} transparent animationType="slide" onRequestClose={() => setIsCreateOpen(false)}>
-          <View style={styles.modalOverlay}>
-            <Pressable
-              style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]}
-              onPress={() => !isSaving && setIsCreateOpen(false)}
-            />
-            <View
-              style={[
-                styles.modalCard,
-                { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-              ]}>
+        <Modal visible={isCreateOpen} transparent animationType="none" onRequestClose={closeCreateModal}>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <View style={styles.modalOverlay}>
+              <Animated.View style={[styles.modalBackdrop, backdropOverlayStyle]} pointerEvents="box-none">
+                <Pressable
+                  style={[StyleSheet.absoluteFillObject]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Fechar painel"
+                  onPress={() => !isSaving && closeCreateModal()}
+                />
+              </Animated.View>
+
+              <Animated.View style={[sheetWrapperStyle]} pointerEvents="box-none">
+                <Animated.View
+                  style={[
+                    styles.modalCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.borderSubtle,
+                    },
+                    sheetCardStyle,
+                  ]}>
+                  <GestureDetector gesture={grabGestures}>
+                    <View
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        createSheetSnap === 'full'
+                          ? 'Reduzir painel (arrastar para baixo)'
+                          : 'Expandir para ecrã cheio (arrastar para cima)'
+                      }
+                      hitSlop={12}
+                      style={[styles.modalGrabberHit, { opacity: isSaving ? 0.45 : 1 }]}>
+                      <View style={[styles.modalGrabberBar, { backgroundColor: colors.borderSubtle }]} />
+                      <FontAwesome
+                        name={createSheetSnap === 'full' ? 'chevron-down' : 'chevron-up'}
+                        size={10}
+                        color={colors.textMuted}
+                        style={{ marginTop: 6 }}
+                      />
+                    </View>
+                  </GestureDetector>
               <View style={styles.modalHeader}>
                 <Text
                   style={[
@@ -410,25 +732,66 @@ export default function InstrutorAgendaScreen() {
                 <Pressable
                   disabled={isSaving}
                   style={[styles.modalClose, { backgroundColor: colors.surfaceMuted }]}
-                  onPress={() => setIsCreateOpen(false)}>
+                  onPress={closeCreateModal}>
                   <FontAwesome name="close" size={12} color={colors.text} />
                 </Pressable>
               </View>
 
-              <ScrollView contentContainerStyle={styles.formContent} showsVerticalScrollIndicator={false}>
+              <GHScrollView
+                style={createSheetSnap === 'full' ? styles.modalFormScrollExpanded : undefined}
+                contentContainerStyle={styles.formContent}
+                showsVerticalScrollIndicator={false}>
                 <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: brandTypography.body }]}>
                   Dia
                 </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayRow}>
-                  {weekDays.map((day) => (
-                    <AgendaDayChip
-                      key={`form-${day.index}`}
-                      dayLabel={day.dayLabel}
-                      dateLabel={day.dateLabel}
-                      selected={form.dayOffset === day.index}
-                      onPress={() => setForm((current) => ({ ...current, dayOffset: day.index }))}
-                    />
-                  ))}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={[styles.dayRow, styles.dayRowWithLoader]}
+                  scrollEventThrottle={100}
+                  onScroll={handleFormDayStripScroll}>
+                  {formDayStrip.flatMap((item, i) => {
+                    const out: ReactElement[] = [];
+                    if (i > 0) {
+                      const prev = formDayStrip[i - 1]!;
+                      const monthChange =
+                         prev.date.getMonth() !== item.date.getMonth() ||
+                        prev.date.getFullYear() !== item.date.getFullYear();
+                      if (monthChange) {
+                        out.push(
+                          <FormDayMonthDivider
+                            key={`month-${item.dateKey}`}
+                            date={item.date}
+                            showYear={prev.date.getFullYear() !== item.date.getFullYear()}
+                          />
+                        );
+                      }
+                    }
+                    out.push(
+                      <AgendaDayChip
+                        key={item.dateKey}
+                        dayLabel={item.dayLabel}
+                        dateLabel={item.dateLabel}
+                        selected={form.selectedDateKey === item.dateKey}
+                        onPress={() =>
+                          setForm((current) => ({ ...current, selectedDateKey: item.dateKey }))
+                        }
+                      />
+                    );
+                    return out;
+                  })}
+                  {dayStripLoading ? (
+                    <View
+                      style={[
+                        styles.dayStripLoaderPill,
+                        {
+                          borderColor: colors.borderSubtle,
+                          backgroundColor: colors.surfaceMuted,
+                        },
+                      ]}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  ) : null}
                 </ScrollView>
 
                 <View style={styles.row}>
@@ -593,7 +956,7 @@ export default function InstrutorAgendaScreen() {
                     },
                   ]}
                 />
-              </ScrollView>
+              </GHScrollView>
 
               <Pressable
                 disabled={!canSubmit || isSaving}
@@ -662,8 +1025,10 @@ export default function InstrutorAgendaScreen() {
                   </View>
                 )}
               </Pressable>
+                </Animated.View>
+              </Animated.View>
             </View>
-          </View>
+          </GestureHandlerRootView>
         </Modal>
       </AppScreen>
     </>
@@ -677,10 +1042,7 @@ const styles = {
     paddingBottom: 96,
     gap: 14,
   },
-  headerCard: {
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 14,
+  weekSelectorStack: {
     gap: 12,
   },
   headerTopRow: {
@@ -741,6 +1103,18 @@ const styles = {
   dayRow: {
     gap: 8,
     paddingRight: 8,
+  },
+  dayRowWithLoader: {
+    alignItems: 'center' as const,
+  },
+  dayStripLoaderPill: {
+    minWidth: 48,
+    height: 86,
+    borderRadius: layout.radius.md,
+    borderWidth: 1,
+    marginLeft: 4,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   stickyWeekWrap: {
     marginHorizontal: -16,
@@ -810,11 +1184,23 @@ const styles = {
     borderTopRightRadius: 22,
     borderWidth: 1,
     borderBottomWidth: 0,
-    maxHeight: '86%' as const,
     paddingHorizontal: 16,
-    paddingTop: 14,
+    paddingTop: 6,
     paddingBottom: 22,
     gap: 12,
+  },
+  modalGrabberHit: {
+    alignItems: 'center' as const,
+    paddingBottom: 10,
+    paddingTop: 2,
+  },
+  modalGrabberBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+  },
+  modalFormScrollExpanded: {
+    flex: 1,
   },
   modalHeader: {
     flexDirection: 'row' as const,

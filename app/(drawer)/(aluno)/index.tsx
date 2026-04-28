@@ -1,11 +1,11 @@
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
+import { HeroSurface } from '@/components/HeroSurface';
 import { useThemeStore } from '@/store/store';
-import { brandTypography, getBrandColors, getHeroGradient, layout } from '@/theme/tokens';
+import { brandTypography, getBrandColors, layout } from '@/theme/tokens';
 
 const BENEFITS = [
   {
@@ -31,7 +31,6 @@ const BENEFITS = [
 export default function AlunoHomeScreen() {
   const mode = useThemeStore((state) => state.mode);
   const colors = getBrandColors(mode);
-  const hero = getHeroGradient(mode);
 
   return (
     <>
@@ -45,17 +44,7 @@ export default function AlunoHomeScreen() {
           }}
           style={{ backgroundColor: 'transparent' }}
           showsVerticalScrollIndicator={false}>
-          <LinearGradient
-            colors={hero}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{
-              borderRadius: layout.radius.lg,
-              padding: layout.space.lg,
-              borderWidth: 1,
-              borderColor: colors.borderSubtle,
-              overflow: 'hidden',
-            }}>
+          <HeroSurface>
             <View
               style={{
                 position: 'absolute',
@@ -133,7 +122,7 @@ export default function AlunoHomeScreen() {
                 </Text>
               </Pressable>
             </View>
-          </LinearGradient>
+          </HeroSurface>
 
           <View style={{ gap: 12 }}>
             {BENEFITS.map((item) => (

@@ -42,7 +42,7 @@ export function SectionHeader({ title, subtitle, actionLabel, onActionPress }: S
 const styles = {
   row: {
     flexDirection: 'row' as const,
-    alignItems: 'flex-start' as const,
+    alignItems: 'flex-end' as const,
     justifyContent: 'space-between' as const,
     gap: 12,
   },
