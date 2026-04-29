@@ -29,7 +29,7 @@ export const lightColors = {
 };
 
 export const darkColors = {
-  primary: '#cf0a36',
+  primary: '#CF0A36',
   primaryMuted: '#4B1220',
   secondary: '#8B6CFF',
   background: '#09090B',
